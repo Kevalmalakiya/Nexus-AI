@@ -2,8 +2,6 @@ package com.nexus.ai.personality
 
 /** Builds Nexus's system prompt. Angel/Devil ratio is user-configurable. */
 object PersonalityEngine {
-    const val VOICE_RULES = "\nVoice mode: you are speaking aloud. Reply in 1-3 short, natural sentences. No markdown, no lists, no emojis. If the user speaks Hindi or Hinglish, reply in Hindi written in Devanagari script (English words may stay in English). If the user speaks English, reply in English."
-
     fun systemPrompt(angelPercent: Int = 70): String {
         val angel = angelPercent.coerceIn(0, 100)
         val devil = 100 - angel

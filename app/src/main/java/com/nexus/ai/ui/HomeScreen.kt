@@ -33,14 +33,13 @@ private fun isOnline(ctx: Context): Boolean {
 }
 
 @Composable
-fun HomeScreen(vm: ChatViewModel, onSettings: () -> Unit, onChats: () -> Unit) {
+fun HomeScreen(vm: ChatViewModel, onSettings: () -> Unit) {
     val phase by vm.phase.collectAsState()
     val level by vm.voice.level.collectAsState()
     val heard by vm.heard.collectAsState()
     val reply by vm.reply.collectAsState()
     val s by vm.state.collectAsState()
     val name by vm.userName.collectAsState()
-    val auto by vm.continuous.collectAsState()
     val ctx = LocalContext.current
     var note by remember { mutableStateOf<String?>(null) }
     val online = remember(phase, s.error) { runCatching { isOnline(ctx) }.getOrDefault(true) }
@@ -56,10 +55,10 @@ fun HomeScreen(vm: ChatViewModel, onSettings: () -> Unit, onChats: () -> Unit) {
     }
 
     val status = when (phase) {
-        VoicePhase.IDLE -> "Orb ko tap karke bolo"
-        VoicePhase.LISTENING -> "Listening…"
+        VoicePhase.IDLE -> "Orb ko tap karke Nexus se baat karo"
+        VoicePhase.LISTENING -> "Listening… bolo"
         VoicePhase.THINKING -> "Thinking…"
-        VoicePhase.SPEAKING -> "Speaking… (tap karke beech me bol sakte ho)"
+        VoicePhase.SPEAKING -> "Speaking… (tap karke rok sakte ho)"
     }
 
     Column(
@@ -68,7 +67,10 @@ fun HomeScreen(vm: ChatViewModel, onSettings: () -> Unit, onChats: () -> Unit) {
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween) {
-            RoundBtn("☰", onSettings)
+            Surface(onClick = onSettings, shape = CircleShape, color = MaterialTheme.colorScheme.surface,
+                modifier = Modifier.size(44.dp)) {
+                Box(contentAlignment = Alignment.Center) { Text("☰") }
+            }
             Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surface) {
                 Text(
                     if (online) "● ONLINE" else "● OFFLINE",
@@ -77,7 +79,7 @@ fun HomeScreen(vm: ChatViewModel, onSettings: () -> Unit, onChats: () -> Unit) {
                     color = if (online) Color(0xFF2FBF85) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                 )
             }
-            RoundBtn(if (auto) "🔁" else "1x") { vm.continuous.value = !auto }
+            Spacer(Modifier.size(44.dp))
         }
 
         Spacer(Modifier.height(16.dp))
@@ -132,20 +134,10 @@ fun HomeScreen(vm: ChatViewModel, onSettings: () -> Unit, onChats: () -> Unit) {
             FeatureCard("⛶  Screen", "Coming soon", Modifier.weight(1f)) {
                 note = "Screen share Phase 4 me aayega (abhi available nahi)"
             }
-            FeatureCard("💬  Chats", "View history", Modifier.weight(1f)) { onChats() }
+            FeatureCard("⚡  Automation", "Coming soon", Modifier.weight(1f)) {
+                note = "Device automation Phase 3 me aayega (abhi available nahi)"
+            }
         }
-        Spacer(Modifier.height(12.dp))
-        FeatureCard("⚡  Automation", "Coming soon", Modifier.fillMaxWidth()) {
-            note = "Device automation Phase 3 me aayega (abhi available nahi)"
-        }
-    }
-}
-
-@Composable
-private fun RoundBtn(label: String, onClick: () -> Unit) {
-    Surface(onClick = onClick, shape = CircleShape, color = MaterialTheme.colorScheme.surface,
-        modifier = Modifier.size(44.dp)) {
-        Box(contentAlignment = Alignment.Center) { Text(label) }
     }
 }
 

@@ -43,14 +43,14 @@ fun NexusOrb(phase: VoicePhase, level: Float, modifier: Modifier = Modifier) {
 
     val amp = when (phase) {
         VoicePhase.LISTENING -> 0.04f + lv * 0.22f
-        VoicePhase.SPEAKING -> 0.05f + 0.10f * pulse * (0.6f + 0.4f * sin(t * 5f))
+        VoicePhase.SPEAKING -> 0.05f + lv * 0.22f + 0.02f * pulse
         VoicePhase.THINKING -> 0.03f
         VoicePhase.IDLE -> 0.02f + 0.01f * pulse
     }
 
     Canvas(modifier) {
         val c = center
-        val base = size.minDimension * 0.26f * (1f + if (phase == VoicePhase.LISTENING) lv * 0.15f else 0f)
+        val base = size.minDimension * 0.26f * (1f + if (phase == VoicePhase.LISTENING || phase == VoicePhase.SPEAKING) lv * 0.15f else 0f)
 
         drawCircle(
             brush = Brush.radialGradient(listOf(edge.copy(alpha = 0.40f), Color.Transparent), center = c, radius = base * 2.3f),

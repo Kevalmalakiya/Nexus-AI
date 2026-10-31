@@ -52,11 +52,11 @@ fun SettingsScreen(vm: ChatViewModel, onBack: () -> Unit) {
             if (s.hasKey) TextButton(onClick = { vm.clearKey() }) { Text("Remove API key") }
         }
 
-        Section("Model") {
-            Text("Khali chhodo to automatic (flash). Busy hone par doosra model khud try hota hai.",
+        Section("Live model") {
+            Text("Khali chhodo to default use hoga: gemini-3.8-live. Error aaye to yahan doosra Live model naam daalo.",
                 style = MaterialTheme.typography.bodySmall)
             OutlinedTextField(modelIn, { modelIn = it }, Modifier.fillMaxWidth(), singleLine = true,
-                label = { Text("Custom model name") })
+                label = { Text("Live model name") })
             Button(onClick = { vm.saveModel(modelIn) }) { Text("Save") }
         }
     }
