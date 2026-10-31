@@ -10,7 +10,7 @@ import java.net.URL
 
 class GeminiProvider(
     private val apiKey: String,
-    private val model: String = "gemini-2.5-flash" // configurable; model names change over time
+    private val model: String = "gemini-flash-latest" // alias; change if your key needs another model
 ) : AiProvider {
 
     override suspend fun generate(system: String, history: List<ChatTurn>): Result<String> =
@@ -38,7 +38,11 @@ class GeminiProvider(
                 }
                 conn.outputStream.use { it.write(body.toString().toByteArray()) }
                 val code = conn.responseCode
-                if (code !in 200..299) throw IOException("Gemini request failed (HTTP $code)")
+                if (code !in 200..299) {
+                    val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                    val msg = runCatching { JSONObject(err).getJSONObject("error").getString("message") }.getOrDefault("")
+                    throw IOException("Gemini HTTP $code: ${msg.take(160)}")
+                }
                 val text = conn.inputStream.bufferedReader().use { it.readText() }
                 JSONObject(text).getJSONArray("candidates").getJSONObject(0)
                     .getJSONObject("content").getJSONArray("parts").getJSONObject(0)
