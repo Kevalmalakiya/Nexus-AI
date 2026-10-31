@@ -26,13 +26,14 @@ import java.util.concurrent.TimeUnit
 
 enum class VoicePhase { IDLE, LISTENING, THINKING, SPEAKING }
 
-/** Gemini Live API: mic PCM 16k in, model PCM 24k out, over one WebSocket. */
+/** Gemini Live API: mic PCM 16k in, model PCM 24k out, plus tool calls, over one WebSocket. */
 class LiveVoice(private val ctx: Context) {
     val level = MutableStateFlow(0f)
     var onPhase: (VoicePhase) -> Unit = {}
     var onUserText: (String) -> Unit = {}
     var onModelText: (String) -> Unit = {}
     var onError: (String) -> Unit = {}
+    var onToolCall: (String, JSONObject) -> String = { _, _ -> "Not supported" }
 
     @Volatile private var running = false
     @Volatile private var phase = VoicePhase.IDLE
@@ -56,13 +57,13 @@ class LiveVoice(private val ctx: Context) {
         if (phase != p) { phase = p; onPhase(p) }
     }
 
-    fun start(apiKey: String, model: String, system: String, voiceName: String) {
+    fun start(apiKey: String, model: String, system: String, voiceName: String, tools: JSONArray) {
         stop()
         running = true
         val url = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=$apiKey"
         ws = client.newWebSocket(Request.Builder().url(url).build(), object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                webSocket.send(setupJson(model, system, voiceName))
+                webSocket.send(setupJson(model, system, voiceName, tools))
             }
             override fun onMessage(webSocket: WebSocket, text: String) = handle(text)
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) = handle(bytes.utf8())
@@ -76,7 +77,7 @@ class LiveVoice(private val ctx: Context) {
         })
     }
 
-    private fun setupJson(model: String, system: String, voiceName: String): String =
+    private fun setupJson(model: String, system: String, voiceName: String, tools: JSONArray): String =
         JSONObject().put("setup", JSONObject()
             .put("model", "models/$model")
             .put("generationConfig", JSONObject()
@@ -85,14 +86,33 @@ class LiveVoice(private val ctx: Context) {
                     JSONObject().put("prebuiltVoiceConfig", JSONObject().put("voiceName", voiceName)))))
             .put("systemInstruction", JSONObject()
                 .put("parts", JSONArray().put(JSONObject().put("text", system))))
+            .put("tools", tools)
             .put("inputAudioTranscription", JSONObject())
             .put("outputAudioTranscription", JSONObject())
         ).toString()
+
+    private fun handleToolCall(tc: JSONObject) {
+        val calls = tc.optJSONArray("functionCalls") ?: return
+        val responses = JSONArray()
+        for (i in 0 until calls.length()) {
+            val c = calls.getJSONObject(i)
+            val name = c.optString("name")
+            val result = runCatching { onToolCall(name, c.optJSONObject("args") ?: JSONObject()) }
+                .getOrElse { "Failed" }
+            responses.put(JSONObject()
+                .put("id", c.optString("id"))
+                .put("name", name)
+                .put("response", JSONObject().put("result", result)))
+        }
+        ws?.send(JSONObject().put("toolResponse",
+            JSONObject().put("functionResponses", responses)).toString())
+    }
 
     private fun handle(text: String) {
         val j = runCatching { JSONObject(text) }.getOrNull() ?: return
         if (j.has("setupComplete")) { startAudio(); return }
         if (j.has("goAway")) { fail("Session time limit khatam. Orb tap karke dobara shuru karo"); return }
+        j.optJSONObject("toolCall")?.let { handleToolCall(it); return }
         val sc = j.optJSONObject("serverContent") ?: return
 
         sc.optJSONObject("inputTranscription")?.optString("text", "")

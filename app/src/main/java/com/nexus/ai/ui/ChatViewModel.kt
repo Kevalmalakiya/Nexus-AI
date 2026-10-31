@@ -2,6 +2,7 @@ package com.nexus.ai.ui
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
+import com.nexus.ai.device.DeviceActions
 import com.nexus.ai.personality.PersonalityEngine
 import com.nexus.ai.security.SecureStore
 import com.nexus.ai.voice.LiveVoice
@@ -19,6 +20,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private var key: String? = store.apiKey()
     val model = MutableStateFlow(store.model())
     val userName = MutableStateFlow(store.userName().ifBlank { "Dost" })
+    val voiceName = MutableStateFlow(store.voice())
+    val angel = MutableStateFlow(store.angel())
     private val _state = MutableStateFlow(UiState(hasKey = key != null))
     val state: StateFlow<UiState> = _state
 
@@ -42,6 +45,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             lastSpeaker = 2
             reply.update { it + t }
         }
+        voice.onToolCall = { name, args -> DeviceActions.execute(getApplication<Application>(), name, args) }
     }
 
     fun saveKey(k: String) {
@@ -57,12 +61,17 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     fun saveModel(m: String) { store.saveModel(m); model.value = m.trim() }
     fun saveName(n: String) { store.saveName(n); userName.value = n.trim().ifBlank { "Dost" } }
+    fun saveVoice(v: String) { store.saveVoice(v); voiceName.value = v }
+    fun saveAngel(a: Int) { store.saveAngel(a); angel.value = a.coerceIn(0, 100) }
     fun setError(msg: String) = _state.update { it.copy(error = msg) }
 
-    private fun system() = PersonalityEngine.systemPrompt() +
+    private fun system() = PersonalityEngine.systemPrompt(angel.value) +
         "\nThe user's name is ${userName.value}." +
         "\nYou are on a live voice call. Speak naturally and briefly (1-3 sentences). " +
-        "Reply in the language the user speaks: Hindi, Hinglish or English. Never read out emojis or markdown."
+        "Reply in the language the user speaks: Hindi, Hinglish or English. Never read out emojis or markdown." +
+        "\nYou can control the phone with tools: open_app, search_youtube, open_settings. " +
+        "Say a short natural line, call the tool, then report ONLY what the tool result says. " +
+        "Never claim a song is playing; say you opened the YouTube search."
 
     /** Idle: start the live session. Speaking: interrupt Nexus. */
     fun onOrbTap() {
@@ -72,7 +81,8 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                 _state.update { it.copy(error = null) }
                 heard.value = ""; reply.value = ""; lastSpeaker = 0
                 _phase.value = VoicePhase.THINKING // connecting
-                voice.start(k, model.value.ifBlank { DEFAULT_MODEL }, system(), "Aoede")
+                voice.start(k, model.value.ifBlank { DEFAULT_MODEL }, system(), voiceName.value,
+                    DeviceActions.declarations())
             }
             VoicePhase.SPEAKING -> voice.interrupt()
             else -> {}

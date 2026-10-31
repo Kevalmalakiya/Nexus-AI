@@ -4,7 +4,7 @@ import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
-/** Keystore-backed encrypted storage: API key, model name, user name. */
+/** Keystore-backed encrypted storage: API key and user settings. */
 class SecureStore(context: Context) {
     private val prefs = EncryptedSharedPreferences.create(
         context, "nexus_secure",
@@ -19,4 +19,8 @@ class SecureStore(context: Context) {
     fun saveModel(m: String) = prefs.edit().putString("model", m.trim()).apply()
     fun userName(): String = prefs.getString("name", "") ?: ""
     fun saveName(n: String) = prefs.edit().putString("name", n.trim()).apply()
+    fun voice(): String = prefs.getString("voice", "Aoede") ?: "Aoede"
+    fun saveVoice(v: String) = prefs.edit().putString("voice", v).apply()
+    fun angel(): Int = prefs.getInt("angel", 70)
+    fun saveAngel(a: Int) = prefs.edit().putInt("angel", a.coerceIn(0, 100)).apply()
 }

@@ -7,11 +7,11 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -43,6 +43,7 @@ fun HomeScreen(vm: ChatViewModel, onSettings: () -> Unit) {
     val ctx = LocalContext.current
     var note by remember { mutableStateOf<String?>(null) }
     val online = remember(phase, s.error) { runCatching { isOnline(ctx) }.getOrDefault(true) }
+    val c = MaterialTheme.colorScheme
 
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
         if (ok) vm.onOrbTap() else vm.setError("Voice ke liye mic permission chahiye")
@@ -67,26 +68,27 @@ fun HomeScreen(vm: ChatViewModel, onSettings: () -> Unit) {
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween) {
-            Surface(onClick = onSettings, shape = CircleShape, color = MaterialTheme.colorScheme.surface,
-                modifier = Modifier.size(44.dp)) {
-                Box(contentAlignment = Alignment.Center) { Text("☰") }
-            }
-            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surface) {
+            RoundIconButton("⚙", onSettings)
+            Surface(
+                shape = CircleShape, color = c.surface.copy(alpha = 0.7f),
+                border = BorderStroke(1.dp, c.outline.copy(alpha = 0.7f))
+            ) {
                 Text(
                     if (online) "● ONLINE" else "● OFFLINE",
                     Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                     style = MaterialTheme.typography.labelMedium,
-                    color = if (online) Color(0xFF2FBF85) else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                    color = if (online) Color(0xFF2FBF85) else c.onBackground.copy(alpha = 0.6f)
                 )
             }
             Spacer(Modifier.size(44.dp))
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(20.dp))
         Column(Modifier.fillMaxWidth()) {
-            Text("Namaste", style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f))
+            Text("Namaste", style = MaterialTheme.typography.bodyMedium, color = c.onBackground.copy(alpha = 0.7f))
             Text(name, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+            Text("More Than AI. Your Digital Companion.", style = MaterialTheme.typography.bodySmall,
+                color = c.primary)
         }
 
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -98,21 +100,21 @@ fun HomeScreen(vm: ChatViewModel, onSettings: () -> Unit) {
             )
         }
 
-        Text(status, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f), textAlign = TextAlign.Center)
+        Text(status, color = c.onBackground.copy(alpha = 0.8f), textAlign = TextAlign.Center)
         if (phase != VoicePhase.IDLE) {
             Spacer(Modifier.height(8.dp))
             Surface(
                 onClick = { vm.stopAll() }, shape = CircleShape,
-                color = MaterialTheme.colorScheme.error.copy(alpha = 0.15f)
+                color = c.error.copy(alpha = 0.15f), border = BorderStroke(1.dp, c.error.copy(alpha = 0.5f))
             ) {
                 Text("STOP", Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
-                    color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelLarge)
+                    color = c.error, style = MaterialTheme.typography.labelLarge)
             }
         }
         if (heard.isNotBlank()) {
             Spacer(Modifier.height(8.dp))
             Text("Tum: $heard", style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center,
-                maxLines = 2, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f))
+                maxLines = 2, color = c.onBackground.copy(alpha = 0.7f))
         }
         if (reply.isNotBlank()) {
             Spacer(Modifier.height(4.dp))
@@ -120,35 +122,28 @@ fun HomeScreen(vm: ChatViewModel, onSettings: () -> Unit) {
         }
         s.error?.let {
             Spacer(Modifier.height(4.dp))
-            Text(it, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.bodySmall)
+            Text(it, color = c.error, textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall)
         }
         note?.let {
             Spacer(Modifier.height(4.dp))
             Text(it, textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f))
+                color = c.onBackground.copy(alpha = 0.75f))
         }
 
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            FeatureCard("⛶  Screen", "Coming soon", Modifier.weight(1f)) {
+            Glass(Modifier.weight(1f), onClick = {
                 note = "Screen share Phase 4 me aayega (abhi available nahi)"
+            }) {
+                Text("⛶  Screen", fontWeight = FontWeight.Bold)
+                Text("Coming soon", style = MaterialTheme.typography.bodySmall, color = c.onSurface.copy(alpha = 0.6f))
             }
-            FeatureCard("⚡  Automation", "Coming soon", Modifier.weight(1f)) {
-                note = "Device automation Phase 3 me aayega (abhi available nahi)"
+            Glass(Modifier.weight(1f), onClick = {
+                note = "Bolo: \"WhatsApp kholo\", \"YouTube par arijit ke gaane dhundo\", \"Wi-Fi settings kholo\""
+            }) {
+                Text("⚡  Automation", fontWeight = FontWeight.Bold)
+                Text("Voice commands", style = MaterialTheme.typography.bodySmall, color = c.secondary)
             }
-        }
-    }
-}
-
-@Composable
-private fun FeatureCard(title: String, sub: String, modifier: Modifier, onClick: () -> Unit) {
-    Surface(onClick = onClick, modifier = modifier, shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surface) {
-        Column(Modifier.padding(14.dp)) {
-            Text(title, fontWeight = FontWeight.Bold)
-            Text(sub, style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f))
         }
     }
 }
