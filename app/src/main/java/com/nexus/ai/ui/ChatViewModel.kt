@@ -24,7 +24,10 @@ data class UiState(
 
 class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private val store = SecureStore(app)
-    private var provider: AiProvider? = store.apiKey()?.let { GeminiProvider(it) }
+    private var key: String? = store.apiKey()
+    val model = MutableStateFlow(store.model())
+    val userName = MutableStateFlow(store.userName().ifBlank { "Dost" })
+    private var provider: AiProvider? = key?.let { GeminiProvider(it, model.value) }
     private val _state = MutableStateFlow(UiState(hasKey = provider != null))
     val state: StateFlow<UiState> = _state
 
@@ -33,25 +36,27 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     val phase: StateFlow<VoicePhase> = _phase
     val heard = MutableStateFlow("")
     val reply = MutableStateFlow("")
-    var continuous = true // after Nexus speaks, listen again automatically
+    val continuous = MutableStateFlow(true)
 
-    fun saveKey(key: String) {
-        if (key.isBlank()) return
-        store.saveApiKey(key)
-        provider = GeminiProvider(key.trim())
+    private fun rebuild() { provider = key?.let { GeminiProvider(it, model.value) } }
+
+    fun saveKey(k: String) {
+        if (k.isBlank()) return
+        store.saveApiKey(k); key = k.trim(); rebuild()
         _state.update { it.copy(hasKey = true, error = null) }
     }
 
     fun clearKey() {
-        store.clearApiKey(); provider = null
+        store.clearApiKey(); key = null; provider = null
         _state.update { it.copy(hasKey = false) }
     }
 
+    fun saveModel(m: String) { store.saveModel(m); model.value = m.trim(); rebuild() }
+    fun saveName(n: String) { store.saveName(n); userName.value = n.trim().ifBlank { "Dost" } }
     fun setError(msg: String) = _state.update { it.copy(error = msg) }
 
     fun send(text: String) = ask(text, speak = false)
 
-    /** Tap on the orb: start / finish listening, or interrupt Nexus and talk. */
     fun onOrbTap() {
         when (_phase.value) {
             VoicePhase.IDLE -> listen()
@@ -83,6 +88,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(messages = history, loading = true, error = null) }
         if (speak) _phase.value = VoicePhase.THINKING
         val system = PersonalityEngine.systemPrompt() +
+            "\nThe user's name is ${userName.value}." +
             if (speak) "\nVoice mode: reply in 1-3 short spoken sentences. No markdown, no lists." else ""
         viewModelScope.launch {
             p.generate(system, history)
@@ -92,7 +98,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         reply.value = r
                         _phase.value = VoicePhase.SPEAKING
                         voice.speak(r) {
-                            if (continuous && _phase.value == VoicePhase.SPEAKING) listen()
+                            if (continuous.value && _phase.value == VoicePhase.SPEAKING) listen()
                             else _phase.value = VoicePhase.IDLE
                         }
                     }

@@ -2,6 +2,7 @@ package com.nexus.ai
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
@@ -24,7 +25,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nexus.ai.ui.ChatScreen
 import com.nexus.ai.ui.ChatViewModel
-import com.nexus.ai.ui.VoiceScreen
+import com.nexus.ai.ui.HomeScreen
+import com.nexus.ai.ui.SettingsScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -48,19 +50,19 @@ class MainActivity : ComponentActivity() {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     val vm: ChatViewModel = viewModel()
                     val s by vm.state.collectAsState()
-                    var textMode by remember { mutableStateOf(false) }
-                    if (!s.hasKey || textMode) {
-                        Box(Modifier.fillMaxSize()) {
+                    var screen by remember { mutableStateOf("home") }
+                    val current = if (!s.hasKey) "settings" else screen
+                    BackHandler(enabled = s.hasKey && current != "home") { screen = "home" }
+                    when (current) {
+                        "settings" -> SettingsScreen(vm, onBack = { screen = "home" })
+                        "chat" -> Box(Modifier.fillMaxSize()) {
                             ChatScreen(vm)
-                            if (s.hasKey) {
-                                TextButton(
-                                    onClick = { textMode = false },
-                                    modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding()
-                                ) { Text("Voice") }
-                            }
+                            TextButton(
+                                onClick = { screen = "home" },
+                                modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding()
+                            ) { Text("Home") }
                         }
-                    } else {
-                        VoiceScreen(vm, onKeyboard = { textMode = true })
+                        else -> HomeScreen(vm, onSettings = { screen = "settings" }, onChats = { screen = "chat" })
                     }
                 }
             }

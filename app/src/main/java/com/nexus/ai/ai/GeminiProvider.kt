@@ -11,13 +11,10 @@ import java.net.URL
 
 class GeminiHttpException(val code: Int, msg: String) : IOException(msg)
 
-/** Retries once on 503/429, then falls back to the next model. */
-class GeminiProvider(
-    private val apiKey: String,
-    private val models: List<String> = listOf(
-        "gemini-flash-latest", "gemini-2.5-flash", "gemini-flash-lite-latest"
-    )
-) : AiProvider {
+/** Tries the custom model first, retries once on 503/429, then falls back. */
+class GeminiProvider(private val apiKey: String, preferred: String = "") : AiProvider {
+    private val models = (listOfNotNull(preferred.trim().takeIf { it.isNotEmpty() }) +
+        listOf("gemini-flash-latest", "gemini-2.5-flash", "gemini-flash-lite-latest")).distinct()
 
     override suspend fun generate(system: String, history: List<ChatTurn>): Result<String> =
         withContext(Dispatchers.IO) {
@@ -51,7 +48,6 @@ class GeminiProvider(
             .put("system_instruction", JSONObject()
                 .put("parts", JSONArray().put(JSONObject().put("text", system))))
             .put("contents", contents)
-
         val url = URL("https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent")
         val conn = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
