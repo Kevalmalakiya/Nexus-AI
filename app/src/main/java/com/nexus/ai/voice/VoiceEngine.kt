@@ -10,22 +10,101 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.speech.tts.Voice
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicInteger
 
 enum class VoicePhase { IDLE, LISTENING, THINKING, SPEAKING }
 
-/** Android SpeechRecognizer (STT) + TextToSpeech (TTS). Mic level drives the orb. */
+/** STT + sentence-queued TTS. Mic level drives the orb. */
 class VoiceEngine(private val ctx: Context) {
     val level = MutableStateFlow(0f)
-    var speechRate = 1.0f
+    var speechRate = 1.05f
     private val main = Handler(Looper.getMainLooper())
     private var recognizer: SpeechRecognizer? = null
     private var tts: TextToSpeech? = null
-    private var ttsReady = false
+    @Volatile private var ttsReady = false
 
-    init { tts = TextToSpeech(ctx) { ttsReady = it == TextToSpeech.SUCCESS } }
+    private val pending = AtomicInteger(0)
+    @Volatile private var sealed = false
+    @Volatile private var doneCb: (() -> Unit)? = null
+    @Volatile private var langSet = false
+    @Volatile private var session = 0
+    private var uid = 0
 
+    init {
+        tts = TextToSpeech(ctx) { st ->
+            ttsReady = st == TextToSpeech.SUCCESS
+            tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(id: String?) {}
+                override fun onDone(id: String?) { finishOne(id) }
+                @Deprecated("Deprecated in Java")
+                override fun onError(id: String?) { finishOne(id) }
+            })
+        }
+    }
+
+    private fun fire() {
+        val cb = doneCb
+        doneCb = null
+        cb?.invoke()
+    }
+
+    private fun finishOne(id: String?) {
+        if (id == null || !id.startsWith("s${session}_")) return
+        if (pending.decrementAndGet() <= 0 && sealed) fire()
+    }
+
+    // ---------- speaking (queue sentences as they stream in) ----------
+    fun beginSpeech(onDone: () -> Unit) {
+        stopSpeaking()
+        session++
+        pending.set(0)
+        sealed = false
+        langSet = false
+        doneCb = onDone
+    }
+
+    fun enqueue(text: String) {
+        val clean = text.replace(Regex("[\\p{So}\\p{Cs}*_#`~]"), "").trim()
+        val engine = tts
+        if (!ttsReady || engine == null || clean.isEmpty()) return
+        if (!langSet) { langSet = true; applyVoice(engine, clean) }
+        pending.incrementAndGet()
+        val r = engine.speak(clean, TextToSpeech.QUEUE_ADD, null, "s${session}_${uid++}")
+        if (r != TextToSpeech.SUCCESS) pending.decrementAndGet()
+    }
+
+    fun endSpeech() {
+        sealed = true
+        if (pending.get() <= 0) fire()
+    }
+
+    fun stopSpeaking() {
+        doneCb = null
+        sealed = true
+        pending.set(0)
+        tts?.stop()
+    }
+
+    private fun applyVoice(engine: TextToSpeech, sample: String) {
+        val deva = sample.any { it in '\u0900'..'\u097F' }
+        val loc = if (deva) Locale("hi", "IN") else Locale("en", "IN")
+        engine.language = loc
+        engine.setSpeechRate(speechRate)
+        engine.setPitch(1.0f)
+        runCatching {
+            val best = engine.voices
+                ?.filter { it.locale.language == loc.language && it.features?.contains("notInstalled") != true }
+                ?.sortedWith(compareByDescending<Voice> { it.quality }
+                    .thenByDescending { it.locale.country == loc.country })
+                ?.firstOrNull()
+            if (best != null) engine.voice = best
+        }
+    }
+
+    // ---------- listening ----------
     fun listen(lang: String = "hi-IN", onText: (String) -> Unit, onFail: (String) -> Unit) {
         main.post {
             stopSpeaking()
@@ -68,24 +147,6 @@ class VoiceEngine(private val ctx: Context) {
 
     fun stopListening() { main.post { recognizer?.stopListening() } }
     fun cancelListening() { main.post { recognizer?.cancel(); level.value = 0f } }
-
-    fun speak(text: String, finished: () -> Unit) {
-        val clean = text.replace(Regex("[\\p{So}\\p{Cs}*_#`~]"), "").trim()
-        val engine = tts
-        if (!ttsReady || engine == null || clean.isEmpty()) { finished(); return }
-        val deva = clean.any { it in '\u0900'..'\u097F' }
-        engine.language = if (deva) Locale("hi", "IN") else Locale("en", "IN")
-        engine.setSpeechRate(speechRate)
-        engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(id: String?) {}
-            override fun onDone(id: String?) { finished() }
-            @Deprecated("Deprecated in Java")
-            override fun onError(id: String?) { finished() }
-        })
-        engine.speak(clean, TextToSpeech.QUEUE_FLUSH, null, "nexus")
-    }
-
-    fun stopSpeaking() { tts?.stop() }
 
     fun shutdown() {
         recognizer?.destroy()

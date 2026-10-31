@@ -37,6 +37,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     val heard = MutableStateFlow("")
     val reply = MutableStateFlow("")
     val continuous = MutableStateFlow(true)
+    @Volatile private var genId = 0
 
     private fun rebuild() { provider = key?.let { GeminiProvider(it, model.value) } }
 
@@ -55,58 +56,106 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun saveName(n: String) { store.saveName(n); userName.value = n.trim().ifBlank { "Dost" } }
     fun setError(msg: String) = _state.update { it.copy(error = msg) }
 
-    fun send(text: String) = ask(text, speak = false)
+    private fun baseSystem() = PersonalityEngine.systemPrompt() + "\nThe user's name is ${userName.value}."
 
+    // ---------- text chat ----------
+    fun send(text: String) {
+        val p = provider ?: return
+        if (text.isBlank() || _state.value.loading) return
+        val history = _state.value.messages + ChatTurn(true, text.trim())
+        _state.update { it.copy(messages = history, loading = true, error = null) }
+        viewModelScope.launch {
+            p.generate(baseSystem(), history)
+                .onSuccess { r -> _state.update { it.copy(messages = history + ChatTurn(false, r), loading = false) } }
+                .onFailure { e -> _state.update { it.copy(loading = false, error = e.message ?: "Request failed") } }
+        }
+    }
+
+    // ---------- voice ----------
     fun onOrbTap() {
         when (_phase.value) {
             VoicePhase.IDLE -> listen()
             VoicePhase.LISTENING -> voice.stopListening()
             VoicePhase.THINKING -> {}
-            VoicePhase.SPEAKING -> { voice.stopSpeaking(); listen() }
+            VoicePhase.SPEAKING -> {
+                genId++
+                voice.stopSpeaking()
+                _state.update { it.copy(loading = false) }
+                listen()
+            }
         }
     }
 
     fun stopAll() {
+        genId++
         _phase.value = VoicePhase.IDLE
         voice.cancelListening()
         voice.stopSpeaking()
+        _state.update { it.copy(loading = false) }
     }
 
     private fun listen() {
         _state.update { it.copy(error = null) }
         _phase.value = VoicePhase.LISTENING
         voice.listen(
-            onText = { t -> heard.value = t; reply.value = ""; ask(t, speak = true) },
+            onText = { t -> heard.value = t; reply.value = ""; askVoice(t) },
             onFail = { msg -> _phase.value = VoicePhase.IDLE; setError(msg) }
         )
     }
 
-    private fun ask(text: String, speak: Boolean) {
+    private fun say(gen: Int, s: String) {
+        if (gen != genId) return
+        if (_phase.value == VoicePhase.THINKING) _phase.value = VoicePhase.SPEAKING
+        reply.value = (reply.value + " " + s).trim()
+        voice.enqueue(s)
+    }
+
+    private fun drain(buf: StringBuilder, flush: Boolean): List<String> {
+        val out = mutableListOf<String>()
+        while (true) {
+            val i = buf.indexOfFirst { it == '.' || it == '!' || it == '?' || it == '।' || it == '\n' }
+            if (i < 0) break
+            val s = buf.substring(0, i + 1).trim()
+            buf.delete(0, i + 1)
+            if (s.length > 1) out.add(s)
+        }
+        if (flush && buf.isNotBlank()) { out.add(buf.toString().trim()); buf.clear() }
+        return out
+    }
+
+    private fun askVoice(text: String) {
         val p = provider ?: return
-        if (text.isBlank() || _state.value.loading) return
+        if (text.isBlank()) return
+        val gen = ++genId
         val history = _state.value.messages + ChatTurn(true, text.trim())
         _state.update { it.copy(messages = history, loading = true, error = null) }
-        if (speak) _phase.value = VoicePhase.THINKING
-        val system = PersonalityEngine.systemPrompt() +
-            "\nThe user's name is ${userName.value}." +
-            if (speak) "\nVoice mode: reply in 1-3 short spoken sentences. No markdown, no lists." else ""
+        _phase.value = VoicePhase.THINKING
+        val system = baseSystem() + PersonalityEngine.VOICE_RULES
+        voice.beginSpeech {
+            if (gen == genId) {
+                if (continuous.value) listen() else _phase.value = VoicePhase.IDLE
+            }
+        }
+        val buf = StringBuilder()
+        val full = StringBuilder()
         viewModelScope.launch {
-            p.generate(system, history)
-                .onSuccess { r ->
-                    _state.update { it.copy(messages = history + ChatTurn(false, r), loading = false) }
-                    if (speak && _phase.value == VoicePhase.THINKING) {
-                        reply.value = r
-                        _phase.value = VoicePhase.SPEAKING
-                        voice.speak(r) {
-                            if (continuous.value && _phase.value == VoicePhase.SPEAKING) listen()
-                            else _phase.value = VoicePhase.IDLE
-                        }
-                    }
+            val r = p.stream(system, history) { chunk ->
+                if (gen == genId) {
+                    full.append(chunk)
+                    buf.append(chunk)
+                    for (s in drain(buf, false)) say(gen, s)
                 }
-                .onFailure { e ->
-                    _state.update { it.copy(loading = false, error = e.message ?: "Request failed") }
-                    if (speak) _phase.value = VoicePhase.IDLE
-                }
+            }
+            if (gen != genId) return@launch
+            r.onSuccess {
+                for (s in drain(buf, true)) say(gen, s)
+                _state.update { st -> st.copy(messages = history + ChatTurn(false, full.toString()), loading = false) }
+                voice.endSpeech()
+            }.onFailure { e ->
+                _state.update { st -> st.copy(loading = false, error = e.message ?: "Request failed") }
+                _phase.value = VoicePhase.IDLE
+                voice.stopSpeaking()
+            }
         }
     }
 
