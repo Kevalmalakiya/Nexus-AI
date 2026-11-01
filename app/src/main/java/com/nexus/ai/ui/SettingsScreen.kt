@@ -5,6 +5,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -23,6 +25,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.nexus.ai.device.NexusAccessibilityService
+import kotlinx.coroutines.delay
 
 private val VOICES = listOf("Aoede", "Kore", "Leda", "Zephyr", "Puck", "Charon")
 
@@ -38,11 +42,20 @@ fun SettingsScreen(vm: ChatViewModel, onBack: () -> Unit) {
     var nameIn by remember(name) { mutableStateOf(name) }
     var modelIn by remember(model) { mutableStateOf(model) }
     var angelUi by remember(angel) { mutableStateOf(angel.toFloat()) }
+    var tick by remember { mutableStateOf(0) }
     val uri = LocalUriHandler.current
     val ctx = LocalContext.current
     val c = MaterialTheme.colorScheme
-    val micOk = ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) ==
-        PackageManager.PERMISSION_GRANTED
+    val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { tick++ }
+    LaunchedEffect(Unit) { while (true) { delay(1000); tick++ } }
+
+    @Suppress("UNUSED_EXPRESSION") tick
+    fun ok(p: String) = ContextCompat.checkSelfPermission(ctx, p) == PackageManager.PERMISSION_GRANTED
+    val micOk = ok(Manifest.permission.RECORD_AUDIO)
+    val smsOk = ok(Manifest.permission.SEND_SMS)
+    val contactsOk = ok(Manifest.permission.READ_CONTACTS)
+    val accOn = NexusAccessibilityService.instance != null
+    val good = Color(0xFF2FBF85)
 
     Column(
         Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()
@@ -65,7 +78,7 @@ fun SettingsScreen(vm: ChatViewModel, onBack: () -> Unit) {
         Glass(Modifier.fillMaxWidth()) {
             Title("🔑  Gemini API key")
             Text(if (s.hasKey) "Key saved ✓ (encrypted, sirf is phone me)" else "Abhi key nahi hai",
-                style = MaterialTheme.typography.bodySmall, color = if (s.hasKey) Color(0xFF2FBF85) else c.error)
+                style = MaterialTheme.typography.bodySmall, color = if (s.hasKey) good else c.error)
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(keyIn, { keyIn = it }, Modifier.fillMaxWidth(), singleLine = true,
                 label = { Text("Gemini API key") },
@@ -77,6 +90,43 @@ fun SettingsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                 OutlinedButton(onClick = { uri.openUri("https://aistudio.google.com/apikey") }) { Text("Get key") }
             }
             if (s.hasKey) TextButton(onClick = { vm.clearKey() }) { Text("Remove API key", color = c.error) }
+        }
+
+        Glass(Modifier.fillMaxWidth()) {
+            Title("⚡  Automation (Accessibility)")
+            Text(if (accOn) "ON ✓ Nexus apps chala sakti hai" else "OFF — Nexus abhi apps control nahi kar sakti",
+                color = if (accOn) good else c.error)
+            Text("Kaise: Accessibility settings kholo → NEXUS AI → ON. Agar 'Restricted setting' dikhe: " +
+                "App info → ⋮ → Allow restricted settings, phir dobara ON karo. Ye sirf tab kaam karta hai jab Nexus ko task diya ho.",
+                style = MaterialTheme.typography.bodySmall, color = c.onSurface.copy(alpha = 0.7f))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = {
+                    ctx.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }) { Text("Accessibility kholo") }
+                OutlinedButton(onClick = {
+                    ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:${ctx.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }) { Text("App info") }
+            }
+        }
+
+        Glass(Modifier.fillMaxWidth()) {
+            Title("🛡  Permissions")
+            Text(if (micOk) "Microphone ✓" else "Microphone ✗", color = if (micOk) good else c.error)
+            Text(if (smsOk) "SMS bhejna ✓" else "SMS bhejna ✗", color = if (smsOk) good else c.error)
+            Text(if (contactsOk) "Contacts padhna ✓" else "Contacts padhna ✗", color = if (contactsOk) good else c.error)
+            Text("SMS hamesha tumhari 'haan' ke baad hi jaata hai. Banking/payment apps blocked hain.",
+                style = MaterialTheme.typography.bodySmall, color = c.onSurface.copy(alpha = 0.7f))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = {
+                    permLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.SEND_SMS,
+                        Manifest.permission.READ_CONTACTS, Manifest.permission.POST_NOTIFICATIONS))
+                }) { Text("Allow sab") }
+                OutlinedButton(onClick = {
+                    ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:${ctx.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }) { Text("Revoke / manage") }
+            }
         }
 
         Glass(Modifier.fillMaxWidth()) {
@@ -93,7 +143,8 @@ fun SettingsScreen(vm: ChatViewModel, onBack: () -> Unit) {
                         border = BorderStroke(1.dp, if (sel) c.primary else c.outline)
                     ) {
                         Text(v, Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                            color = if (sel) c.primary else c.onSurface, fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal)
+                            color = if (sel) c.primary else c.onSurface,
+                            fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal)
                     }
                 }
             }
@@ -101,8 +152,7 @@ fun SettingsScreen(vm: ChatViewModel, onBack: () -> Unit) {
 
         Glass(Modifier.fillMaxWidth()) {
             Title("😇😈  Personality")
-            Text("Angel ${angelUi.toInt()}%  •  Devil ${100 - angelUi.toInt()}%",
-                style = MaterialTheme.typography.bodyMedium)
+            Text("Angel ${angelUi.toInt()}%  •  Devil ${100 - angelUi.toInt()}%", style = MaterialTheme.typography.bodyMedium)
             Slider(value = angelUi, onValueChange = { angelUi = it },
                 onValueChangeFinished = { vm.saveAngel(angelUi.toInt()) }, valueRange = 0f..100f)
             Text("Agle session se lagu hoga", style = MaterialTheme.typography.bodySmall,
@@ -121,21 +171,9 @@ fun SettingsScreen(vm: ChatViewModel, onBack: () -> Unit) {
         }
 
         Glass(Modifier.fillMaxWidth()) {
-            Title("🛡  Permissions")
-            Text(if (micOk) "Microphone: Allowed ✓" else "Microphone: Not allowed",
-                color = if (micOk) Color(0xFF2FBF85) else c.error)
-            Text("Automation: sirf app kholna, YouTube search aur settings kholna. Kuch bhi chhupkar nahi hota.",
-                style = MaterialTheme.typography.bodySmall, color = c.onSurface.copy(alpha = 0.7f))
-            TextButton(onClick = {
-                ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                    Uri.parse("package:${ctx.packageName}")))
-            }) { Text("App permissions kholo") }
-        }
-
-        Glass(Modifier.fillMaxWidth()) {
             Title("ℹ️  About")
-            Text("NEXUS AI v0.3.0", fontWeight = FontWeight.Bold)
-            Text("Privacy: jab session chalu ho, tumhari awaaz Google Gemini ko bheji jaati hai. STOP dabate hi band.",
+            Text("NEXUS AI v0.4.0", fontWeight = FontWeight.Bold)
+            Text("Privacy: session chalu hone par tumhari awaaz aur Nexus ke padhe hue screen text Google Gemini ko jaate hain. STOP dabate hi band.",
                 style = MaterialTheme.typography.bodySmall, color = c.onSurface.copy(alpha = 0.7f))
         }
         Spacer(Modifier.height(12.dp))

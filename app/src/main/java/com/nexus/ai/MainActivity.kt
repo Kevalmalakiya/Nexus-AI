@@ -12,6 +12,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nexus.ai.ui.ChatViewModel
 import com.nexus.ai.ui.HomeScreen
+import com.nexus.ai.ui.MemoryScreen
 import com.nexus.ai.ui.NexusTheme
 import com.nexus.ai.ui.SettingsScreen
 
@@ -22,11 +23,14 @@ class MainActivity : ComponentActivity() {
             NexusTheme {
                 val vm: ChatViewModel = viewModel()
                 val s by vm.state.collectAsState()
-                var settings by remember { mutableStateOf(false) }
-                val showSettings = !s.hasKey || settings
-                BackHandler(enabled = s.hasKey && showSettings) { settings = false }
-                if (showSettings) SettingsScreen(vm, onBack = { settings = false })
-                else HomeScreen(vm, onSettings = { settings = true })
+                var screen by remember { mutableStateOf("home") }
+                val cur = if (!s.hasKey) "settings" else screen
+                BackHandler(enabled = s.hasKey && cur != "home") { screen = "home" }
+                when (cur) {
+                    "settings" -> SettingsScreen(vm) { screen = "home" }
+                    "memory" -> MemoryScreen(vm) { screen = "home" }
+                    else -> HomeScreen(vm, onSettings = { screen = "settings" }, onMemory = { screen = "memory" })
+                }
             }
         }
     }

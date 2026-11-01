@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.nexus.ai.device.NexusAccessibilityService
 import com.nexus.ai.voice.VoicePhase
 
 private fun isOnline(ctx: Context): Boolean {
@@ -33,13 +34,14 @@ private fun isOnline(ctx: Context): Boolean {
 }
 
 @Composable
-fun HomeScreen(vm: ChatViewModel, onSettings: () -> Unit) {
+fun HomeScreen(vm: ChatViewModel, onSettings: () -> Unit, onMemory: () -> Unit) {
     val phase by vm.phase.collectAsState()
     val level by vm.voice.level.collectAsState()
     val heard by vm.heard.collectAsState()
     val reply by vm.reply.collectAsState()
     val s by vm.state.collectAsState()
     val name by vm.userName.collectAsState()
+    val act by vm.action.collectAsState()
     val ctx = LocalContext.current
     var note by remember { mutableStateOf<String?>(null) }
     val online = remember(phase, s.error) { runCatching { isOnline(ctx) }.getOrDefault(true) }
@@ -80,15 +82,14 @@ fun HomeScreen(vm: ChatViewModel, onSettings: () -> Unit) {
                     color = if (online) Color(0xFF2FBF85) else c.onBackground.copy(alpha = 0.6f)
                 )
             }
-            Spacer(Modifier.size(44.dp))
+            RoundIconButton("🧠", onMemory)
         }
 
         Spacer(Modifier.height(20.dp))
         Column(Modifier.fillMaxWidth()) {
             Text("Namaste", style = MaterialTheme.typography.bodyMedium, color = c.onBackground.copy(alpha = 0.7f))
             Text(name, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-            Text("More Than AI. Your Digital Companion.", style = MaterialTheme.typography.bodySmall,
-                color = c.primary)
+            Text("More Than AI. Your Digital Companion.", style = MaterialTheme.typography.bodySmall, color = c.primary)
         }
 
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -100,6 +101,16 @@ fun HomeScreen(vm: ChatViewModel, onSettings: () -> Unit) {
             )
         }
 
+        if (act.isNotBlank() && phase != VoicePhase.IDLE) {
+            Surface(
+                shape = CircleShape, color = c.secondary.copy(alpha = 0.15f),
+                border = BorderStroke(1.dp, c.secondary.copy(alpha = 0.5f))
+            ) {
+                Text(act, Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.labelMedium, color = c.secondary, maxLines = 2)
+            }
+            Spacer(Modifier.height(8.dp))
+        }
         Text(status, color = c.onBackground.copy(alpha = 0.8f), textAlign = TextAlign.Center)
         if (phase != VoicePhase.IDLE) {
             Spacer(Modifier.height(8.dp))
@@ -133,16 +144,20 @@ fun HomeScreen(vm: ChatViewModel, onSettings: () -> Unit) {
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Glass(Modifier.weight(1f), onClick = {
-                note = "Screen share Phase 4 me aayega (abhi available nahi)"
+                note = "Live screen sharing agle patch me aayega (abhi available nahi)"
             }) {
                 Text("⛶  Screen", fontWeight = FontWeight.Bold)
                 Text("Coming soon", style = MaterialTheme.typography.bodySmall, color = c.onSurface.copy(alpha = 0.6f))
             }
             Glass(Modifier.weight(1f), onClick = {
-                note = "Bolo: \"WhatsApp kholo\", \"YouTube par arijit ke gaane dhundo\", \"Wi-Fi settings kholo\""
+                note = if (NexusAccessibilityService.instance == null)
+                    "Automation OFF hai. Settings > Accessibility me NEXUS AI chalu karo."
+                else "Bolo: \"Instagram kholo\", \"Rahul ko SMS bhejo\", \"Wi-Fi settings kholo\""
             }) {
                 Text("⚡  Automation", fontWeight = FontWeight.Bold)
-                Text("Voice commands", style = MaterialTheme.typography.bodySmall, color = c.secondary)
+                val on = NexusAccessibilityService.instance != null
+                Text(if (on) "Ready ✓" else "Setup needed", style = MaterialTheme.typography.bodySmall,
+                    color = if (on) Color(0xFF2FBF85) else c.error)
             }
         }
     }
