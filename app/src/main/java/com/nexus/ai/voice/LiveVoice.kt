@@ -42,8 +42,8 @@ class LiveVoice(private val ctx: Context) {
     @Volatile private var discarding = false
     @Volatile private var turnOpen = false
     @Volatile private var headset = false
-    private var audioStarted = false
-    private var ws: WebSocket? = null
+    internal var audioStarted = false
+    internal var ws: WebSocket? = null
     private var recorder: AudioRecord? = null
     private var track: AudioTrack? = null
     private val playQ = LinkedBlockingQueue<ByteArray>()

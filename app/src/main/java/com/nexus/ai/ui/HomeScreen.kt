@@ -46,6 +46,7 @@ fun HomeScreen(vm: ChatViewModel, onSettings: () -> Unit, onMemory: () -> Unit) 
     var note by remember { mutableStateOf<String?>(null) }
     val online = remember(phase, s.error) { runCatching { isOnline(ctx) }.getOrDefault(true) }
     val c = MaterialTheme.colorScheme
+    val share = rememberShareController(vm) { msg -> note = msg }
 
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
         if (ok) vm.onOrbTap() else vm.setError("Voice ke liye mic permission chahiye")
@@ -144,10 +145,10 @@ fun HomeScreen(vm: ChatViewModel, onSettings: () -> Unit, onMemory: () -> Unit) 
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Glass(Modifier.weight(1f), onClick = {
-                note = "Live screen sharing agle patch me aayega (abhi available nahi)"
+                share.toggle()
             }) {
                 Text("⛶  Screen", fontWeight = FontWeight.Bold)
-                Text("Coming soon", style = MaterialTheme.typography.bodySmall, color = c.onSurface.copy(alpha = 0.6f))
+                Text(if (share.sharing) "● Sharing — tap to stop" else "Tap to share", style = MaterialTheme.typography.bodySmall, color = if (share.sharing) c.error else c.secondary)
             }
             Glass(Modifier.weight(1f), onClick = {
                 note = if (NexusAccessibilityService.instance == null)
