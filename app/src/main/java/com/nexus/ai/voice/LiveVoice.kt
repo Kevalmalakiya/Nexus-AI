@@ -112,7 +112,7 @@ class LiveVoice(private val ctx: Context) {
         val j = runCatching { JSONObject(text) }.getOrNull() ?: return
         if (j.has("setupComplete")) { startAudio(); return }
         if (j.has("goAway")) { fail("Session time limit khatam. Orb tap karke dobara shuru karo"); return }
-        j.optJSONObject("toolCall")?.let { handleToolCall(it); return }
+        j.optJSONObject("toolCall")?.let { tc -> Thread { handleToolCall(tc) }.start(); return }
         val sc = j.optJSONObject("serverContent") ?: return
 
         sc.optJSONObject("inputTranscription")?.optString("text", "")
