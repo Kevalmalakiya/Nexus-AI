@@ -12,6 +12,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -94,9 +96,9 @@ fun HomeScreen(vm: ChatViewModel, onSettings: () -> Unit, onMemory: () -> Unit) 
         }
 
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            NexusOrb(
-                phase, level,
-                Modifier.fillMaxSize().clickable(
+            NexusAvatar(
+                phase,
+                Modifier.fillMaxSize().clip(RoundedCornerShape(28.dp)).clickable(
                     interactionSource = remember { MutableInteractionSource() }, indication = null
                 ) { tap() }
             )
